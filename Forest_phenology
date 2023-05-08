@@ -1,0 +1,71 @@
+library(raster)
+library(luna)
+library(phenofit)
+library(terra)
+
+
+
+get_sos <- function(vi){
+  t <- seq(1, 365, 8)
+  tout <- seq(1, 365, 1)
+  methods <- c("AG", "Beck", "Elmore", "Gu", "Zhang")
+  fit <- curvefit(vi, t, tout, methods)
+  x <- fit$model$Zhang      # chose one model
+  pheno_res <- PhenoTrs(x, IsPlot = FALSE)
+  sos <- as.numeric(pheno_res[1])
+  return(sos)
+}
+
+get_eos <- function(vi){
+  t <- seq(1, 365, 8)
+  tout <- seq(1, 365, 1)
+  methods <- c("AG", "Beck", "Elmore", "Gu", "Zhang")
+  fit <- curvefit(vi, t, tout, methods)
+  x <- fit$model$Zhang      # chose one model
+  pheno_res <- PhenoTrs(x, IsPlot = FALSE)
+  eos <- as.numeric(pheno_res[2])
+  return(eos)
+}
+
+
+cl.cores <- detectCores()
+cl<-makeCluster(4)
+clusterExport(cl,"curvefit",envir = environment())
+clusterExport(cl,"PhenoTrs",envir = environment())
+
+a <- c(0.2274, 0.2329, 0.2356, 0.245, 0.3482, 0.3185, 0.2624,
+       0.4237, 0.4894, 0.5423, 0.7189, 0.5827, 0.6967, 0.3989,
+       0.5102, 0.5051, 0.5141, 0.4025, 0.4682, 0.3278, 0.3256,
+       0.2644, 0.2668)
+
+vi_path <- "D:/test/gpp/gpp1982/"
+sos_path <- "D:/test/sos/sos_"
+eos_path <- "D:/test/eos/eos_"
+
+for(yr in 1982:1982){
+  tmp_pat <- paste0(as.character(yr))
+  vi_file<-list.files(vi_path, pattern = tmp_pat)
+  viArray <- array(0, dim = c(708, 1233, 46))
+  for(vi_idx in 1:46){
+    tmp_vi <- raster(paste0(vi_path, vi_file[(vi_idx)]))
+    tmp_vi[is.na(tmp_vi)] <- 0
+    tmp_vi_array <- as.array(tmp_vi)
+    viArray[, , vi_idx] <- tmp_vi_array
+  }
+  
+  sos_ma <- parApply(cl, viArray, c(1,2), get_sos)
+  eos_ma <- parApply(cl, viArray, c(1,2), get_eos)
+  
+  tmp_ras <- rast(paste0(gpp_path, vi_file[1]))
+  tmp_ext <- ext(tmp_ras)
+  tmp_crs <- crs(tmp_ras)
+  
+  tmp_sos_out <- rast(sos_ma, crs=tmp_crs, extent = tmp_ext)
+  tmp_eos_out <- rast(eos_ma, crs=tmp_crs, extent = tmp_ext)
+  
+  out_name <- paste0(sos_path, '_sos.tif')
+  writeRaster(tmp_sos_out, out_name, overwrite=TRUE)
+  
+  out_name <- paste0(eos_path, '_eos.tif')
+  writeRaster(tmp_eos_out, out_name, overwrite=TRUE)
+}
