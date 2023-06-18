@@ -1,0 +1,7 @@
+library(bigleaf)
+
+data <- read.csv("F:/000_PhDWork/01china/0validation/site/Fluxnet/CBF.csv")
+
+b <- umolCO2.to.gC(data$CBF, constants = bigleaf.constants())
+
+write.csv(b, file ="d:/cbf.csv") 
